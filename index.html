@@ -5,16 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>캐릭터 아카이브</title>
     
-    <!-- 필수 라이브러리 -->
+    <!-- 1. 필수 도구 (가장 가벼운 버전) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Firebase 호환 버전 -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
     <style>
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
@@ -38,39 +33,45 @@
         
         /* 폰트 크기 예외 */
         .text-header { font-size: 40px !important; font-weight: 900; letter-spacing: -0.02em; }
-        .text-sub { font-size: 18px !important; font-weight: 700; }
+        .text-sub { font-size: 16px !important; font-weight: 700; }
         .text-card { font-size: 14px !important; font-weight: 700; }
 
         .rounded-2xl { border-radius: 1rem !important; }
         .shadow-soft { box-shadow: 0 4px 20px -2px rgba(152, 176, 160, 0.15); }
         
-        /* 연대기 스타일 (정렬 완벽 보정) */
-        .timeline-item {
-            position: relative;
-            padding-left: 24px;
-            padding-bottom: 24px;
+        /* --- [수정된 연대기 디자인] --- */
+        .timeline-wrapper { 
+            position: relative; 
+            padding-left: 24px; 
+            padding-bottom: 32px; 
         }
-        .timeline-item:last-child {
+        
+        /* 마지막 항목은 아래 여백 제거 */
+        .timeline-wrapper:last-child {
             padding-bottom: 0;
-            border-left-color: transparent;
         }
-        /* 줄기: 점 중앙(8px) 정렬 */
-        .timeline-item::before {
-            content: '';
+
+        /* 줄기 (선): 점의 중심을 관통 */
+        .timeline-line {
             position: absolute;
-            left: 7px; /* 8px(중심) - 1px(반너비) */
-            top: 14px;
-            bottom: 0;
+            left: 7px; /* (점 16px의 절반 8px) - (선 2px의 절반 1px) = 7px */
+            top: 6px; /* 점의 중심에서 시작 */
+            bottom: -6px; /* 다음 점의 중심까지 이어짐 */
             width: 2px;
             background-color: #C8D1CC;
+            z-index: 0;
         }
-        .timeline-item:last-child::before { display: none; }
         
-        /* 매듭 */
-        .timeline-dot-marker {
+        /* [중요] 마지막 항목의 줄기는 보이지 않게 함 (선이 더 생기는 문제 해결) */
+        .timeline-wrapper:last-child .timeline-line {
+            display: none;
+        }
+
+        /* 매듭 (점): 텍스트 높이에 맞춰 정렬 */
+        .timeline-dot {
             position: absolute;
             left: 0;
-            top: 2px;
+            top: 2px; /* 텍스트 시작 높이와 시각적 정렬 */
             width: 16px;
             height: 16px;
             background-color: white;
@@ -79,185 +80,46 @@
             z-index: 10;
         }
 
-        /* 에러 메시지창 */
-        #crash-screen {
-            position: fixed; inset: 0; background: #F1F5F2; z-index: 99999;
-            display: none; flex-direction: column; align-items: center; justify-content: center;
-            padding: 20px; text-align: center;
-        }
-        
         .no-scrollbar::-webkit-scrollbar { display: none; }
         button:active { transform: scale(0.98); }
     </style>
 </head>
 <body>
-    <div id="crash-screen">
-        <h2 style="font-size: 24px; font-weight: bold; color: #D8000C; margin-bottom: 10px;">오류가 발생했습니다</h2>
-        <div id="crash-log" style="background: white; padding: 15px; border: 1px solid #D8000C; border-radius: 8px; text-align: left; max-width: 80%;"></div>
-    </div>
-    
     <div id="root"></div>
 
-    <script>
-        // 최후의 안전장치: 에러 발생 시 흰 화면 대신 에러 로그 표시
-        window.onerror = function(msg, url, line, col, error) {
-            const screen = document.getElementById('crash-screen');
-            const log = document.getElementById('crash-log');
-            if (screen && log) {
-                screen.style.display = 'flex';
-                log.innerHTML = `<strong>내용:</strong> ${msg}<br><strong>위치:</strong> ${line}번째 줄<br><br>파일을 다운로드해서 사용 중이라면, 이 오류는 무시해도 되는 경우가 많습니다.`;
-            }
-            return false;
-        };
-    </script>
-
     <script type="text/babel">
+        // --- 아이콘 직접 정의 ---
+        const Icons = {
+            Plus: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
+            Trash2: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
+            Edit2: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
+            ChevronRight: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>,
+            Download: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>,
+            Upload: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>,
+            Clock: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+            FileText: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>,
+            UserCircle: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>,
+            History: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>,
+            Check: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
+            Copy: (props) => <svg {...props} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+        };
+
+        const Icon = ({ name, className }) => {
+            const Comp = Icons[name];
+            return Comp ? <Comp className={className} /> : null;
+        };
+
         const { useState, useEffect, useMemo } = React;
 
-        // 아이콘 (직접 정의하여 로딩 오류 차단)
-        const Icons = {
-            Plus: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>,
-            Trash2: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>,
-            Edit2: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>,
-            ChevronRight: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>,
-            Share2: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>,
-            Download: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>,
-            Upload: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>,
-            Clock: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
-            FileText: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>,
-            UserCircle: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/></svg>,
-            History: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>,
-            Check: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>,
-            Copy: (props) => <svg {...props} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-        };
-
-        const Icon = ({ name }) => {
-            const Comp = Icons[name];
-            return Comp ? <Comp /> : null;
-        };
-
-        // --- 데이터 관리자 (안전한 하이브리드 엔진) ---
-        const DataService = {
-            useFirebase: false,
-            appId: 'my-archive-safe',
-            db: null,
-
-            init: function() {
-                try {
-                    // Firebase 설정이 있는지 확인 (없으면 에러 없이 넘어감)
-                    if (typeof window.__firebase_config !== 'undefined' && window.firebase) {
-                        const config = JSON.parse(window.__firebase_config);
-                        if (!firebase.apps.length) firebase.initializeApp(config);
-                        this.db = firebase.firestore();
-                        this.useFirebase = true;
-                        console.log("온라인 모드로 시작합니다.");
-                    } else {
-                        console.warn("오프라인 모드로 시작합니다 (설정 없음).");
-                        this.useFirebase = false;
-                    }
-                } catch (e) {
-                    console.error("초기화 중 오류, 오프라인 모드 전환:", e);
-                    this.useFirebase = false;
-                }
-            },
-
-            // 데이터 구독 (안전 장치 포함)
-            subscribe: function(appId, callback) {
-                this.appId = appId || 'my-archive-safe';
-                
-                if (this.useFirebase && this.db) {
-                    try {
-                        return this.db.collection('artifacts').doc(this.appId).collection('public').doc('data').collection('characters')
-                            .onSnapshot(snapshot => {
-                                const fetched = {};
-                                snapshot.forEach(doc => {
-                                    const d = doc.data();
-                                    const group = d.mythName || '미분류';
-                                    if (!fetched[group]) fetched[group] = [];
-                                    fetched[group].push({ ...d, id: doc.id });
-                                });
-                                callback(fetched, true);
-                            }, err => {
-                                console.warn("연결 실패, 로컬 데이터 사용:", err);
-                                callback(this.getLocalData(this.appId), false);
-                            });
-                    } catch (e) {
-                        callback(this.getLocalData(this.appId), false);
-                        return () => {};
-                    }
-                } else {
-                    // 로컬 모드
-                    callback(this.getLocalData(this.appId), false);
-                    const handler = () => callback(this.getLocalData(this.appId), false);
-                    window.addEventListener(`local-update-${this.appId}`, handler);
-                    return () => window.removeEventListener(`local-update-${this.appId}`, handler);
-                }
-            },
-
-            getLocalData: function(id) {
-                try {
-                    const stored = localStorage.getItem(`archive_${id}`);
-                    return stored ? JSON.parse(stored) : {};
-                } catch(e) { return {}; }
-            },
-
-            saveLocalData: function(id, data) {
-                localStorage.setItem(`archive_${id}`, JSON.stringify(data));
-                window.dispatchEvent(new Event(`local-update-${id}`));
-            },
-
-            // 저장 (자동 분기)
-            save: async function(id, data, isDelete = false) {
-                // 1. 로컬 저장 (항상 실행)
-                const current = this.getLocalData(this.appId);
-                // 기존 데이터 삭제
-                for (const group in current) {
-                    current[group] = current[group].filter(c => c.id !== id);
-                    if(current[group].length === 0) delete current[group];
-                }
-                // 추가 (삭제 아닐 경우)
-                if (!isDelete) {
-                    const group = data.mythName || '미분류';
-                    if(!current[group]) current[group] = [];
-                    current[group].push({ ...data, id });
-                }
-                this.saveLocalData(this.appId, current);
-
-                // 2. Firebase 저장 (가능할 때만)
-                if (this.useFirebase && this.db) {
-                    try {
-                        const ref = this.db.collection('artifacts').doc(this.appId).collection('public').doc('data').collection('characters').doc(id);
-                        if (isDelete) await ref.delete();
-                        else await ref.set(data);
-                    } catch(e) { console.warn("클라우드 저장 실패"); }
-                }
-            },
-
-            import: async function(importedData) {
-                // 로컬에 먼저 저장
-                this.saveLocalData(this.appId, importedData);
-                
-                // Firebase에도 업로드 시도
-                if (this.useFirebase && this.db) {
-                   const batch = this.db.batch();
-                   const col = this.db.collection('artifacts').doc(this.appId).collection('public').doc('data').collection('characters');
-                   Object.values(importedData).flat().forEach(c => {
-                       batch.set(col.doc(c.id || Date.now().toString()), c);
-                   });
-                   await batch.commit();
-                }
-            }
-        };
-
         const App = () => {
+            // 상태 관리
             const [data, setData] = useState({});
             const [viewMode, setViewMode] = useState('list');
-            const [appId, setAppId] = useState('my-archive');
-            const [tempAppId, setTempAppId] = useState('');
-            const [isOnline, setIsOnline] = useState(false);
-
-            // 폼 상태
+            
+            // 입력 폼
             const [form, setForm] = useState({ mythName: '', name: '', summary: '' });
+            
+            // 상세/수정 모달
             const [selectedChar, setSelectedChar] = useState(null);
             const [isEditing, setIsEditing] = useState(false);
             const [editForm, setEditForm] = useState({});
@@ -266,87 +128,123 @@
             const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
             const [logText, setLogText] = useState('');
 
-            // 초기화
+            // 초기 로드
             useEffect(() => {
-                const initId = (typeof window !== 'undefined' && window.__app_id) || localStorage.getItem('last_app_id') || 'my-archive';
-                setAppId(initId);
-                setTempAppId(initId);
-                DataService.init();
+                const savedData = localStorage.getItem('my_character_archive_final');
+                if (savedData) {
+                    try {
+                        setData(JSON.parse(savedData));
+                    } catch (e) {
+                        console.error("데이터 로드 실패", e);
+                    }
+                }
             }, []);
 
-            // 데이터 구독
+            // 저장
             useEffect(() => {
-                const unsubscribe = DataService.subscribe(appId, (newData, status) => {
-                    setData(newData);
-                    setIsOnline(status);
-                });
-                localStorage.setItem('last_app_id', appId);
-                return unsubscribe;
-            }, [appId]);
+                localStorage.setItem('my_character_archive_final', JSON.stringify(data));
+            }, [data]);
 
-            // --- 핸들러 ---
-            const handleConnect = () => {
-                if (!tempAppId.trim()) return;
-                setAppId(tempAppId.trim());
-                setSelectedChar(null);
-            };
+            // --- 기능 ---
 
-            const handleAdd = async () => {
+            const handleAdd = () => {
                 if (!form.mythName || !form.name) return alert("필수 항목을 입력하세요.");
+                
                 const id = Date.now().toString();
                 const newChar = {
+                    id,
                     ...form,
                     age: '', gender: '', size: '', alias: '', group: '', otherInfo: '',
                     hasTimeline: true, logs: [], 
                     createdAt: new Date().toLocaleDateString()
                 };
-                await DataService.save(id, newChar);
+
+                const group = form.mythName;
+                const newData = { ...data };
+                if (!newData[group]) newData[group] = [];
+                newData[group].push(newChar);
+
+                setData(newData);
                 setForm({ mythName: '', name: '', summary: '' });
             };
 
-            const openDetails = (char) => {
-                setSelectedChar(char);
-                setEditForm({ ...char });
+            const openDetails = (char, group) => {
+                setSelectedChar({ ...char, _group: group });
+                setEditForm({ ...char, mythName: group });
                 setIsEditing(false);
             };
 
-            const saveDetails = async () => {
-                await DataService.save(selectedChar.id, editForm);
+            const saveDetails = () => {
+                const oldGroup = selectedChar._group;
+                const newGroup = editForm.mythName;
+                const newData = { ...data };
+
+                // 기존 데이터 삭제
+                if (newData[oldGroup]) {
+                    newData[oldGroup] = newData[oldGroup].filter(c => c.id !== selectedChar.id);
+                    if (newData[oldGroup].length === 0) delete newData[oldGroup];
+                }
+
+                // 수정된 데이터 추가
+                if (!newData[newGroup]) newData[newGroup] = [];
+                const updatedChar = { ...editForm, id: selectedChar.id };
+                newData[newGroup].push(updatedChar);
+
+                setData(newData);
+                setSelectedChar({ ...updatedChar, _group: newGroup });
                 setIsEditing(false);
-                setSelectedChar({...editForm, id: selectedChar.id});
             };
 
-            const deleteChar = async () => {
+            const deleteChar = () => {
                 if (!confirm("삭제하시겠습니까?")) return;
-                await DataService.save(selectedChar.id, null, true);
+                const group = selectedChar._group;
+                const newData = { ...data };
+                
+                if (newData[group]) {
+                    newData[group] = newData[group].filter(c => c.id !== selectedChar.id);
+                    if (newData[group].length === 0) delete newData[group];
+                }
+                
+                setData(newData);
                 setSelectedChar(null);
             };
 
-            const addLog = async () => {
+            const addLog = () => {
                 if (!logText) return;
                 const newLog = { id: Date.now().toString(), date: logDate, text: logText };
                 const updatedLogs = [newLog, ...(selectedChar.logs || [])];
-                const updatedChar = { ...selectedChar, logs: updatedLogs };
                 
-                await DataService.save(selectedChar.id, updatedChar);
-                setSelectedChar(updatedChar);
-                setLogText('');
+                const group = selectedChar._group;
+                const newData = { ...data };
+                const charIndex = newData[group].findIndex(c => c.id === selectedChar.id);
+                if (charIndex > -1) {
+                    newData[group][charIndex] = { ...newData[group][charIndex], logs: updatedLogs };
+                    setData(newData);
+                    setSelectedChar({ ...newData[group][charIndex], _group: group });
+                    setLogText('');
+                }
             };
 
-            const deleteLog = async (logId) => {
+            const deleteLog = (logId) => {
                 if (!confirm("기록을 삭제할까요?")) return;
                 const updatedLogs = selectedChar.logs.filter(l => l.id !== logId);
-                const updatedChar = { ...selectedChar, logs: updatedLogs };
-                await DataService.save(selectedChar.id, updatedChar);
-                setSelectedChar(updatedChar);
+                
+                const group = selectedChar._group;
+                const newData = { ...data };
+                const charIndex = newData[group].findIndex(c => c.id === selectedChar.id);
+                if (charIndex > -1) {
+                    newData[group][charIndex] = { ...newData[group][charIndex], logs: updatedLogs };
+                    setData(newData);
+                    setSelectedChar({ ...newData[group][charIndex], _group: group });
+                }
             };
 
             const exportFile = () => {
-                const blob = new Blob([JSON.stringify({ appId, data }, null, 2)], { type: 'application/json' });
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `archive_${appId}.json`;
+                a.download = `archive_backup_${new Date().toLocaleDateString()}.json`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -357,15 +255,14 @@
                 const file = e.target.files[0];
                 if (!file) return;
                 const reader = new FileReader();
-                reader.onload = async (evt) => {
+                reader.onload = (evt) => {
                     try {
                         const loaded = JSON.parse(evt.target.result);
-                        if (!loaded.data) return alert("파일 형식이 맞지 않습니다.");
-                        if (confirm("데이터를 불러오시겠습니까? (기존 데이터 위에 덮어씁니다)")) {
-                            await DataService.import(loaded.data);
+                        if (confirm("기존 데이터를 덮어쓰고 불러오시겠습니까?")) {
+                            setData(loaded);
                             alert("완료되었습니다.");
                         }
-                    } catch(e) { alert("파일 오류"); }
+                    } catch (e) { alert("파일 오류"); }
                 };
                 reader.readAsText(file);
             };
@@ -379,48 +276,22 @@
 
             return (
                 <div className="min-h-screen p-6 md:p-12 max-w-7xl mx-auto">
-                    <header className="text-center mb-12 border-b border-[#AAB8B0] pb-8 relative">
-                        <div className="absolute top-0 right-0 text-[10px] opacity-40 font-bold uppercase tracking-widest">
-                            {isOnline ? "Online Mode" : "Offline Mode"}
-                        </div>
+                    <header className="text-center mb-12 border-b border-[#AAB8B0] pb-8">
                         <h1 className="text-header text-[#4D5A51] mb-3">캐릭터 아카이브</h1>
                         <p className="opacity-50 font-bold uppercase tracking-widest text-xs">통합 인물 기록 시스템</p>
                     </header>
 
                     {/* 제어판 */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10 max-w-4xl mx-auto">
-                        <div className="bg-white p-4 rounded-2xl border border-[#E2EAE5] shadow-soft flex flex-col gap-2">
-                            <div className="flex items-center gap-2 opacity-50 font-bold uppercase text-xs mb-1">
-                                <Icons.Share2 /> 공유 식별자 (ID)
-                            </div>
-                            <div className="flex gap-2 w-full">
-                                <input 
-                                    type="text" 
-                                    value={tempAppId} 
-                                    onChange={e=>setTempAppId(e.target.value)} 
-                                    className="flex-1 min-w-0 bg-[#F8F9F8] p-3 rounded-2xl border border-[#E2EAE5] outline-none text-ellipsis" 
-                                    placeholder="ID 입력" 
-                                />
-                                <button 
-                                    onClick={handleConnect} 
-                                    className="flex-shrink-0 bg-[#98B0A0] text-white px-6 py-3 rounded-2xl font-bold hover:bg-[#7A9482] transition-all whitespace-nowrap"
-                                >
-                                    이동
-                                </button>
-                            </div>
-                        </div>
-                        <div className="bg-white p-4 rounded-2xl border border-[#E2EAE5] shadow-soft flex gap-2 justify-center items-center">
-                            <button onClick={exportFile} className="flex-1 py-3 bg-white border border-[#E2EAE5] font-bold rounded-2xl hover:bg-[#F8F9F8] flex items-center justify-center gap-2 transition-all h-full">
-                                <Icons.Download size={14} /> 저장
-                            </button>
-                            <label className="flex-1 py-3 bg-white border border-[#E2EAE5] font-bold rounded-2xl hover:bg-[#F8F9F8] flex items-center justify-center gap-2 cursor-pointer transition-all h-full">
-                                <Icons.Upload size={14} /> 불러오기
-                                <input type="file" onChange={importFile} className="hidden" />
-                            </label>
-                        </div>
+                    <div className="flex gap-4 justify-center mb-10">
+                        <button onClick={exportFile} className="bg-white px-6 py-3 rounded-2xl border border-[#E2EAE5] shadow-soft font-bold hover:bg-[#F8F9F8] flex items-center gap-2 transition-all">
+                            <Icon name="Download" size={14} /> 데이터 저장 (내보내기)
+                        </button>
+                        <label className="bg-white px-6 py-3 rounded-2xl border border-[#E2EAE5] shadow-soft font-bold hover:bg-[#F8F9F8] flex items-center gap-2 cursor-pointer transition-all">
+                            <Icon name="Upload" size={14} /> 데이터 복구 (불러오기)
+                            <input type="file" onChange={importFile} className="hidden" />
+                        </label>
                     </div>
 
-                    {/* 탭 */}
                     <div className="flex justify-center gap-4 mb-10">
                         <button onClick={()=>setViewMode('list')} className={`px-10 py-3 rounded-2xl font-bold border transition-all ${viewMode==='list'?'bg-[#98B0A0] text-white':'bg-white text-[#4D5A51]'}`}>인물 목록</button>
                         <button onClick={()=>setViewMode('timeline')} className={`px-10 py-3 rounded-2xl font-bold border transition-all ${viewMode==='timeline'?'bg-[#98B0A0] text-white':'bg-white text-[#4D5A51]'}`}>전체 연대기</button>
@@ -431,7 +302,7 @@
                         <div className="flex flex-col lg:flex-row gap-8">
                             <aside className="w-full lg:w-80 bg-white/50 p-6 border border-[#E2EAE5] rounded-2xl h-fit sticky top-8">
                                 <h3 className="font-bold border-b border-[#AAB8B0] pb-3 mb-4 uppercase text-xs flex items-center gap-2 opacity-70">
-                                    <Icons.Plus /> 신규 등록
+                                    <Icon name="Plus" /> 신규 등록
                                 </h3>
                                 <div className="space-y-4">
                                     <input type="text" value={form.mythName} onChange={e=>setForm({...form, mythName:e.target.value})} className="w-full p-2.5 bg-white border border-[#E2EAE5] rounded-2xl outline-none" placeholder="소속 (예: 그리스 신화)" />
@@ -448,12 +319,12 @@
                                         <h3 className="text-sub mb-4 border-l-4 border-[#98B0A0] pl-3 text-[#4D5A51] uppercase">{group}</h3>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                             {data[group].map(char => (
-                                                <div key={char.id} onClick={()=>{openDetails(char)}} className="bg-white p-5 rounded-2xl border border-[#E2EAE5] shadow-soft cursor-pointer hover:-translate-y-1 transition-all group flex flex-col">
+                                                <div key={char.id} onClick={()=>openDetails(char, group)} className="bg-white p-5 rounded-2xl border border-[#E2EAE5] shadow-soft cursor-pointer hover:-translate-y-1 transition-all group flex flex-col">
                                                     <div className="flex justify-between mb-3 opacity-40">
-                                                        {char.hasTimeline ? <Icons.Clock/> : <Icons.FileText/>}
-                                                        <Icons.ChevronRight />
+                                                        {char.hasTimeline ? <Icon name="Clock"/> : <Icon name="FileText"/>}
+                                                        <Icon name="ChevronRight" />
                                                     </div>
-                                                    <h4 className="text-card-title mb-2 group-hover:text-[#6B8E23] transition-colors">{char.name}</h4>
+                                                    <h4 className="text-card mb-2 group-hover:text-[#6B8E23] transition-colors">{char.name}</h4>
                                                     <p className="opacity-70 line-clamp-2 leading-relaxed">{char.summary}</p>
                                                     {char.alias && <div className="mt-auto pt-3 text-[#98B0A0] font-bold opacity-80 uppercase tracking-wider">{char.alias}</div>}
                                                 </div>
@@ -470,8 +341,9 @@
                             <h2 className="text-center font-bold text-xl mb-10 uppercase tracking-widest text-[#4A5D50]">통합 연대기</h2>
                             <div className="space-y-0">
                                 {globalTimeline.map(log => (
-                                    <div key={log.id} className="timeline-item">
-                                        <div className="timeline-dot-marker"></div>
+                                    <div key={log.id} className="timeline-wrapper">
+                                        <div className="timeline-line"></div>
+                                        <div className="timeline-dot"></div>
                                         <div className="font-bold opacity-40 mb-1 uppercase text-xs">{log.date}</div>
                                         <div className="font-bold mb-2 text-base">{log.charName} <span className="opacity-40 text-xs ml-1">[{log.mythName}]</span></div>
                                         <div className="bg-[#F9FBF9] p-4 rounded-2xl border border-[#E2EAE5] leading-relaxed">{log.text}</div>
@@ -496,7 +368,7 @@
                                 <div className="p-8 flex flex-col lg:flex-row gap-10">
                                     <aside className="w-full lg:w-[420px] space-y-6">
                                         <div className="flex justify-between items-center border-b border-[#E2EAE5] pb-2">
-                                            <h3 className="font-bold opacity-50 uppercase text-xs flex items-center gap-2"><Icons.UserCircle/> 고정 정보</h3>
+                                            <h3 className="font-bold opacity-50 uppercase text-xs flex items-center gap-2"><Icon name="UserCircle"/> 고정 정보</h3>
                                             <button onClick={()=>setIsEditing(!isEditing)} className="font-bold text-xs border-b border-[#4D5A51] text-[#4D5A51]">{isEditing ? '취소' : '편집'}</button>
                                         </div>
 
@@ -542,7 +414,7 @@
                                         {selectedChar.hasTimeline ? (
                                             <div className="max-w-2xl mx-auto space-y-10">
                                                 <div className="bg-white p-8 rounded-2xl border border-[#E2EAE5] shadow-soft">
-                                                    <h3 className="font-bold opacity-50 mb-6 flex items-center gap-2 text-xs uppercase"><Icons.Clock/> 사건 기록</h3>
+                                                    <h3 className="font-bold opacity-50 mb-6 flex items-center gap-2 text-xs uppercase"><Icon name="Clock"/> 사건 기록</h3>
                                                     <div className="flex flex-col gap-4">
                                                         <div className="flex gap-4">
                                                             <input type="date" value={logDate} onChange={e=>setLogDate(e.target.value)} className="w-1/3 p-3 bg-[#F9FBF9] border border-[#E2EAE5] rounded-2xl outline-none" />
@@ -554,11 +426,12 @@
 
                                                 <div className="pl-4">
                                                     {(selectedChar.logs||[]).map(log => (
-                                                        <div key={log.id} className="timeline-item">
-                                                            <div className="timeline-dot-marker"></div>
+                                                        <div key={log.id} className="timeline-wrapper">
+                                                            <div className="timeline-line"></div>
+                                                            <div className="timeline-dot"></div>
                                                             <div className="flex justify-between items-start mb-2">
                                                                 <span className="font-bold opacity-40 uppercase tracking-widest">{log.date}</span>
-                                                                <button onClick={()=>deleteLog(log.id)} className="opacity-20 hover:text-red-500 transition-colors"><Icons.Trash2 /></button>
+                                                                <button onClick={()=>deleteLog(log.id)} className="opacity-20 hover:text-red-500 transition-colors"><Icon name="Trash2"/></button>
                                                             </div>
                                                             <div className="bg-white p-5 rounded-2xl border border-[#E2EAE5] shadow-sm leading-relaxed text-justify">{log.text}</div>
                                                         </div>
@@ -567,7 +440,7 @@
                                             </div>
                                         ) : (
                                             <div className="h-full flex flex-col items-center justify-center opacity-20 border-2 border-dashed border-[#AAB8B0] rounded-2xl p-20 bg-[#F9FBF9]">
-                                                <Icons.History />
+                                                <Icon name="History" size={80} />
                                                 <p className="mt-6 font-bold text-center">연대기 기능이 꺼져 있습니다.</p>
                                             </div>
                                         )}
