@@ -1,827 +1,419 @@
 <!DOCTYPE html>
-
 <html lang="ko">
-
 <head>
-
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>캐릭터 아카이브</title>
-
-   
-
-    <!-- 필수 도구 로드 -->
-
+    
+    <!-- 필수 라이브러리 (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
-
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
     <script src="https://unpkg.com/lucide@latest"></script>
 
-
     <style>
-
         @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
-
-       
-
+        
         :root {
-
             --sage-bg: #F1F5F2;
-
             --sage-primary: #98B0A0;
-
-            --sage-text: #4D5A51;
-
+            --sage-dark: #4D5A51;
             --sage-border: #E2EAE5;
-
         }
 
-
-        body {
-
-            font-family: 'Pretendard', sans-serif;
-
+        body { 
+            font-family: 'Pretendard', sans-serif; 
             background-color: var(--sage-bg);
-
-            color: var(--sage-text);
-
-            margin: 0;
-
-            padding: 0;
-
+            color: var(--sage-dark);
             font-size: 12px;
-
+            margin: 0; padding: 0;
         }
 
-
+        /* 모든 요소 12px(9pt) 강제 고정 */
         * { font-size: 12px; box-sizing: border-box; }
-
-       
-
-        /* 제목 크기 예외 */
-
-        .text-header { font-size: 28px !important; font-weight: 800 !important; }
-
-        .text-section { font-size: 16px !important; font-weight: 700 !important; }
-
-        .text-card-title { font-size: 14px !important; font-weight: 700 !important; }
-
+        
+        /* 예외: 제목 및 강조 */
+        .text-header { font-size: 28px !important; font-weight: 800; }
+        .text-sub { font-size: 16px !important; font-weight: 700; }
+        .text-card { font-size: 14px !important; font-weight: 700; }
 
         .rounded-2xl { border-radius: 1rem !important; }
-
         .shadow-soft { box-shadow: 0 4px 20px -2px rgba(152, 176, 160, 0.15); }
-
-       
-
+        
         /* 연대기 라인 */
-
         .timeline-line {
-
             position: absolute; left: 19px; top: 0; bottom: 0; width: 1px; background-color: #AAB8B0;
-
         }
-
         .timeline-dot {
-
             position: absolute; left: 10px; top: 6px; width: 18px; height: 18px;
-
             background-color: white; border: 2px solid var(--sage-primary); border-radius: 50%; z-index: 10;
-
         }
 
-
+        /* 스크롤바 숨김 */
         .no-scrollbar::-webkit-scrollbar { display: none; }
-
         button:active { transform: scale(0.98); }
-
     </style>
-
 </head>
-
 <body>
-
     <div id="root"></div>
 
-
     <script type="text/babel">
-
         const { useState, useEffect, useMemo } = React;
 
-
-        // 아이콘 헬퍼
-
+        // 아이콘 컴포넌트 (안전한 로딩)
         const Icon = ({ name, size = 16, className }) => {
-
-            const LucideIcon = window.lucide ? window.lucide[name] : null;
-
-            if (!LucideIcon) return <span className="w-4 h-4 bg-gray-200 rounded-full inline-block"></span>;
-
-            return <LucideIcon size={size} className={className} />;
-
+            if (!window.lucide) return <span className="w-4 h-4 bg-gray-300 rounded-full inline-block"></span>;
+            const LucideIcon = window.lucide[name];
+            return LucideIcon ? <LucideIcon size={size} className={className} /> : null;
         };
-
-
-        // 로컬 스토리지 관리자 (외부 연결 없음, 오직 내부 저장)
-
-        const StorageManager = {
-
-            KEY: 'character_archive_data',
-
-           
-
-            load: () => {
-
-                try {
-
-                    const data = localStorage.getItem('character_archive_data');
-
-                    return data ? JSON.parse(data) : {};
-
-                } catch (e) { return {}; }
-
-            },
-
-
-            save: (data) => {
-
-                localStorage.setItem('character_archive_data', JSON.stringify(data));
-
-            },
-
-
-            addChar: (char) => {
-
-                const data = StorageManager.load();
-
-                const group = char.mythName || '미분류';
-
-                if (!data[group]) data[group] = [];
-
-                data[group].push(char);
-
-                StorageManager.save(data);
-
-                return data;
-
-            },
-
-
-            updateChar: (updatedChar) => {
-
-                const data = StorageManager.load();
-
-                // 기존 데이터 제거 후 재삽입 (그룹 변경 대응)
-
-                for (const group in data) {
-
-                    data[group] = data[group].filter(c => c.id !== updatedChar.id);
-
-                    if (data[group].length === 0) delete data[group];
-
-                }
-
-                const newGroup = updatedChar.mythName || '미분류';
-
-                if (!data[newGroup]) data[newGroup] = [];
-
-                data[newGroup].push(updatedChar);
-
-                StorageManager.save(data);
-
-                return data;
-
-            },
-
-
-            deleteChar: (id) => {
-
-                const data = StorageManager.load();
-
-                for (const group in data) {
-
-                    data[group] = data[group].filter(c => c.id !== id);
-
-                    if (data[group].length === 0) delete data[group];
-
-                }
-
-                StorageManager.save(data);
-
-                return data;
-
-            },
-
-
-            import: (newData) => {
-
-                StorageManager.save(newData);
-
-                return newData;
-
-            }
-
-        };
-
 
         const App = () => {
-
+            // 상태 관리
             const [data, setData] = useState({});
-
             const [viewMode, setViewMode] = useState('list');
-
-           
-
+            
             // 입력 폼
-
             const [form, setForm] = useState({ mythName: '', name: '', summary: '' });
-
-           
-
-            // 상세/수정 상태
-
+            
+            // 상세/수정 모달
             const [selectedChar, setSelectedChar] = useState(null);
-
             const [isEditing, setIsEditing] = useState(false);
-
             const [editForm, setEditForm] = useState({});
-
-           
-
-            // 일지 상태
-
+            
+            // 일지
             const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0]);
-
             const [logText, setLogText] = useState('');
 
-
-            // 초기 로딩
-
+            // 1. 초기 로드 (브라우저 저장소에서 불러오기)
             useEffect(() => {
-
-                setData(StorageManager.load());
-
+                const savedData = localStorage.getItem('my_character_archive');
+                if (savedData) {
+                    try {
+                        setData(JSON.parse(savedData));
+                    } catch (e) {
+                        console.error("데이터 로드 실패", e);
+                    }
+                }
+                // 아이콘 리로드 트리거
+                if (window.lucide) window.lucide.createIcons();
             }, []);
 
-
-            // --- 기능 핸들러 ---
-
-
-            const handleAdd = () => {
-
-                if (!form.mythName || !form.name) return alert("소속과 이름을 입력하세요.");
-
-                const newChar = {
-
-                    id: Date.now().toString(),
-
-                    ...form,
-
-                    age: '', gender: '', size: '', alias: '', group: '', otherInfo: '',
-
-                    hasTimeline: true, logs: [],
-
-                    createdAt: new Date().toLocaleDateString()
-
-                };
-
-                const newData = StorageManager.addChar(newChar);
-
-                setData(newData);
-
-                setForm({ mythName: '', name: '', summary: '' });
-
-            };
-
-
-            const openDetails = (char) => {
-
-                setSelectedChar(char);
-
-                setEditForm({ ...char });
-
-                setIsEditing(false);
-
-            };
-
-
-            const saveDetails = () => {
-
-                const newData = StorageManager.updateChar(editForm);
-
-                setData(newData);
-
-                setSelectedChar(editForm);
-
-                setIsEditing(false);
-
-            };
-
-
-            const addLog = () => {
-
-                if (!logText) return;
-
-                const newLog = { id: Date.now().toString(), date: logDate, text: logText };
-
-                const updatedLogs = [newLog, ...(selectedChar.logs || [])];
-
-                const updatedChar = { ...selectedChar, logs: updatedLogs };
-
-               
-
-                const newData = StorageManager.updateChar(updatedChar);
-
-                setData(newData);
-
-                setSelectedChar(updatedChar);
-
-                setLogText('');
-
-            };
-
-
-            const deleteLog = (logId) => {
-
-                if(!confirm("이 기록을 삭제하시겠습니까?")) return;
-
-                const updatedLogs = selectedChar.logs.filter(l => l.id !== logId);
-
-                const updatedChar = { ...selectedChar, logs: updatedLogs };
-
-               
-
-                const newData = StorageManager.updateChar(updatedChar);
-
-                setData(newData);
-
-                setSelectedChar(updatedChar);
-
-            };
-
-
-            const deleteChar = () => {
-
-                if(!confirm("정말 영구히 삭제하시겠습니까?")) return;
-
-                const newData = StorageManager.deleteChar(selectedChar.id);
-
-                setData(newData);
-
-                setSelectedChar(null);
-
-            };
-
-
-            const exportFile = () => {
-
-                const blob = new Blob([JSON.stringify({ data }, null, 2)], { type: 'application/json' });
-
-                const url = URL.createObjectURL(blob);
-
-                const a = document.createElement('a');
-
-                a.href = url;
-
-                a.download = `my_archive.json`;
-
-                document.body.appendChild(a);
-
-                a.click();
-
-                document.body.removeChild(a);
-
-                URL.revokeObjectURL(url);
-
-            };
-
-
-            const importFile = (e) => {
-
-                const file = e.target.files[0];
-
-                if (!file) return;
-
-                const reader = new FileReader();
-
-                reader.onload = (evt) => {
-
-                    try {
-
-                        const loaded = JSON.parse(evt.target.result);
-
-                        if (!loaded.data) return alert("파일 형식이 올바르지 않습니다.");
-
-                        const newData = StorageManager.import(loaded.data);
-
-                        setData(newData);
-
-                        alert("불러오기 완료!");
-
-                    } catch(e) { alert("파일 오류가 발생했습니다."); }
-
-                };
-
-                reader.readAsText(file);
-
-            };
-
-
-            const globalTimeline = useMemo(() => {
-
-                return Object.values(data).flat()
-
-                    .filter(c => c.hasTimeline)
-
-                    .flatMap(c => (c.logs || []).map(l => ({...l, charName: c.name, mythName: c.mythName})))
-
-                    .sort((a, b) => new Date(b.date) - new Date(a.date));
-
+            // 2. 데이터 변경 시 자동 저장
+            useEffect(() => {
+                localStorage.setItem('my_character_archive', JSON.stringify(data));
             }, [data]);
 
+            // --- 기능 구현 ---
+
+            const handleAdd = () => {
+                if (!form.mythName || !form.name) return alert("소속과 이름을 입력해주세요.");
+                
+                const id = Date.now().toString();
+                const newChar = {
+                    id,
+                    ...form,
+                    age: '', gender: '', size: '', alias: '', group: '', otherInfo: '',
+                    hasTimeline: true, logs: [], 
+                    createdAt: new Date().toLocaleDateString()
+                };
+
+                const group = form.mythName;
+                const newData = { ...data };
+                if (!newData[group]) newData[group] = [];
+                newData[group].push(newChar);
+
+                setData(newData);
+                setForm({ mythName: '', name: '', summary: '' });
+            };
+
+            const openDetails = (char, group) => {
+                setSelectedChar({ ...char, _group: group }); // 원래 그룹 기억
+                setEditForm({ ...char, mythName: group });
+                setIsEditing(false);
+            };
+
+            const saveDetails = () => {
+                const oldGroup = selectedChar._group;
+                const newGroup = editForm.mythName;
+                const newData = { ...data };
+
+                // 1. 기존 데이터 삭제
+                newData[oldGroup] = newData[oldGroup].filter(c => c.id !== selectedChar.id);
+                if (newData[oldGroup].length === 0) delete newData[oldGroup];
+
+                // 2. 수정된 데이터 추가
+                if (!newData[newGroup]) newData[newGroup] = [];
+                const updatedChar = { ...editForm, id: selectedChar.id };
+                newData[newGroup].push(updatedChar);
+
+                setData(newData);
+                setSelectedChar({ ...updatedChar, _group: newGroup });
+                setIsEditing(false);
+            };
+
+            const deleteChar = () => {
+                if (!confirm("정말 삭제하시겠습니까?")) return;
+                const group = selectedChar._group;
+                const newData = { ...data };
+                newData[group] = newData[group].filter(c => c.id !== selectedChar.id);
+                if (newData[group].length === 0) delete newData[group];
+                
+                setData(newData);
+                setSelectedChar(null);
+            };
+
+            const addLog = () => {
+                if (!logText) return;
+                const newLog = { id: Date.now().toString(), date: logDate, text: logText };
+                const updatedLogs = [newLog, ...(selectedChar.logs || [])];
+                
+                // 데이터 업데이트
+                const group = selectedChar._group;
+                const newData = { ...data };
+                const charIndex = newData[group].findIndex(c => c.id === selectedChar.id);
+                newData[group][charIndex] = { ...newData[group][charIndex], logs: updatedLogs };
+
+                setData(newData);
+                setSelectedChar({ ...newData[group][charIndex], _group: group });
+                setLogText('');
+            };
+
+            const deleteLog = (logId) => {
+                if (!confirm("기록을 삭제할까요?")) return;
+                const updatedLogs = selectedChar.logs.filter(l => l.id !== logId);
+                
+                const group = selectedChar._group;
+                const newData = { ...data };
+                const charIndex = newData[group].findIndex(c => c.id === selectedChar.id);
+                newData[group][charIndex] = { ...newData[group][charIndex], logs: updatedLogs };
+
+                setData(newData);
+                setSelectedChar({ ...newData[group][charIndex], _group: group });
+            };
+
+            // 파일 내보내기
+            const exportFile = () => {
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `archive_backup_${new Date().toLocaleDateString()}.json`;
+                a.click();
+            };
+
+            // 파일 불러오기
+            const importFile = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (evt) => {
+                    try {
+                        const loadedData = JSON.parse(evt.target.result);
+                        if (confirm("기존 데이터를 덮어쓰고 불러오시겠습니까?")) {
+                            setData(loadedData);
+                            alert("불러오기 완료!");
+                        }
+                    } catch (e) { alert("파일 형식이 올바르지 않습니다."); }
+                };
+                reader.readAsText(file);
+            };
+
+            // 통합 연대기 정렬
+            const globalTimeline = useMemo(() => {
+                return Object.entries(data).flatMap(([group, chars]) => 
+                    chars.filter(c => c.hasTimeline)
+                         .flatMap(c => (c.logs || []).map(l => ({ ...l, charName: c.name, mythName: group })))
+                ).sort((a, b) => new Date(b.date) - new Date(a.date));
+            }, [data]);
 
             return (
-
                 <div className="min-h-screen p-6 md:p-12 max-w-7xl mx-auto">
-
-                    {/* 헤더 */}
-
                     <header className="text-center mb-10 border-b border-[#AAB8B0] pb-6">
-
                         <h1 className="text-header text-[#4D5A51] mb-2">캐릭터 아카이브</h1>
-
                         <p className="opacity-50 font-bold uppercase tracking-widest text-xs">단독형 인물 기록 시스템</p>
-
                     </header>
 
-
-                    {/* 제어판 */}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10 max-w-3xl mx-auto">
-
-                        <div className="bg-white p-4 rounded-2xl border border-[#E2EAE5] shadow-soft flex flex-col justify-center items-center gap-2">
-
-                            <button onClick={exportFile} className="w-full py-3 bg-white border border-[#E2EAE5] font-bold rounded-2xl hover:bg-[#F8F9F8] flex items-center justify-center gap-2 transition-all">
-
-                                <Icon name="Download" size={14} /> 데이터 파일로 저장 (친구 공유용)
-
-                            </button>
-
-                        </div>
-
-                        <div className="bg-white p-4 rounded-2xl border border-[#E2EAE5] shadow-soft flex flex-col justify-center items-center gap-2">
-
-                            <label className="w-full py-3 bg-white border border-[#E2EAE5] font-bold rounded-2xl hover:bg-[#F8F9F8] flex items-center justify-center gap-2 cursor-pointer transition-all">
-
-                                <Icon name="Upload" size={14} /> 데이터 파일 불러오기
-
-                                <input type="file" onChange={importFile} className="hidden" />
-
-                            </label>
-
-                        </div>
-
+                    {/* 상단 버튼 */}
+                    <div className="flex gap-4 justify-center mb-10">
+                        <button onClick={exportFile} className="bg-white px-6 py-3 rounded-2xl border border-[#E2EAE5] shadow-soft font-bold hover:bg-[#F8F9F8] flex items-center gap-2">
+                            <Icon name="Download" /> 데이터 파일 저장
+                        </button>
+                        <label className="bg-white px-6 py-3 rounded-2xl border border-[#E2EAE5] shadow-soft font-bold hover:bg-[#F8F9F8] flex items-center gap-2 cursor-pointer">
+                            <Icon name="Upload" /> 데이터 파일 불러오기
+                            <input type="file" onChange={importFile} className="hidden" />
+                        </label>
                     </div>
 
-
-                    {/* 탭 */}
-
-                    <div className="flex justify-center gap-4 mb-10">
-
+                    <nav className="flex justify-center gap-4 mb-10">
                         <button onClick={()=>setViewMode('list')} className={`px-10 py-3 rounded-2xl font-bold border transition-all ${viewMode==='list'?'bg-[#98B0A0] text-white':'bg-white text-[#4D5A51]'}`}>인물 목록</button>
-
                         <button onClick={()=>setViewMode('timeline')} className={`px-10 py-3 rounded-2xl font-bold border transition-all ${viewMode==='timeline'?'bg-[#98B0A0] text-white':'bg-white text-[#4D5A51]'}`}>전체 연대기</button>
-
-                    </div>
-
-
-                    {/* 목록 뷰 */}
+                    </nav>
 
                     {viewMode === 'list' && (
-
                         <div className="flex flex-col lg:flex-row gap-8">
-
+                            {/* 등록 폼 */}
                             <aside className="w-full lg:w-80 bg-white/50 p-6 border border-[#E2EAE5] rounded-2xl h-fit sticky top-8">
-
                                 <h3 className="font-bold border-b border-[#AAB8B0] pb-3 mb-4 uppercase text-xs flex items-center gap-2 opacity-70">
-
                                     <Icon name="Plus" /> 신규 등록
-
                                 </h3>
-
                                 <div className="space-y-4">
-
                                     <input type="text" value={form.mythName} onChange={e=>setForm({...form, mythName:e.target.value})} className="w-full p-2.5 bg-white border border-[#E2EAE5] rounded-2xl outline-none" placeholder="소속 (예: 그리스 신화)" />
-
                                     <input type="text" value={form.name} onChange={e=>setForm({...form, name:e.target.value})} className="w-full p-2.5 bg-white border border-[#E2EAE5] rounded-2xl outline-none" placeholder="이름" />
-
                                     <textarea value={form.summary} onChange={e=>setForm({...form, summary:e.target.value})} className="w-full p-2.5 bg-white border border-[#E2EAE5] rounded-2xl outline-none resize-none h-20" placeholder="간단 요약"></textarea>
-
-                                    <button onClick={handleAdd} className="w-full py-3 bg-[#98B0A0] text-white font-bold rounded-2xl hover:bg-[#7A9482] transition-all">등록하세요</button>
-
+                                    <button onClick={handleAdd} className="w-full py-3 bg-[#98B0A0] text-white font-bold rounded-2xl hover:bg-[#7A9482] transition-all">등록하기</button>
                                 </div>
-
                             </aside>
 
-
+                            {/* 목록 */}
                             <main className="flex-1 space-y-10">
-
-                                {Object.keys(data).length === 0 ? <div className="text-center py-20 opacity-40 italic">아직 등록된 인물이 없습니다.</div> :
-
+                                {Object.keys(data).length === 0 ? <div className="text-center py-20 opacity-40 italic">등록된 인물이 없습니다.</div> :
                                 Object.keys(data).sort().map(group => (
-
                                     <section key={group}>
-
-                                        <h3 className="text-section mb-4 border-l-4 border-[#98B0A0] pl-3 text-[#4D5A51] uppercase">{group}</h3>
-
+                                        <h3 className="text-sub mb-4 border-l-4 border-[#98B0A0] pl-3 text-[#4D5A51] uppercase">{group}</h3>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-
                                             {data[group].map(char => (
-
-                                                <div key={char.id} onClick={()=>{openDetails(char)}} className="bg-white p-5 rounded-2xl border border-[#E2EAE5] shadow-soft cursor-pointer hover:-translate-y-1 transition-all group flex flex-col">
-
+                                                <div key={char.id} onClick={()=>openDetails(char, group)} className="bg-white p-5 rounded-2xl border border-[#E2EAE5] shadow-soft cursor-pointer hover:-translate-y-1 transition-all group flex flex-col">
                                                     <div className="flex justify-between mb-3 opacity-40">
-
                                                         {char.hasTimeline ? <Icon name="Clock"/> : <Icon name="FileText"/>}
-
                                                         <Icon name="ChevronRight" />
-
                                                     </div>
-
-                                                    <h4 className="text-card-title mb-2 group-hover:text-[#6B8E23] transition-colors">{char.name}</h4>
-
+                                                    <h4 className="text-card mb-2 group-hover:text-[#6B8E23] transition-colors">{char.name}</h4>
                                                     <p className="opacity-70 line-clamp-2 leading-relaxed">{char.summary}</p>
-
                                                     {char.alias && <div className="mt-auto pt-3 text-[#98B0A0] font-bold opacity-80 uppercase tracking-wider">{char.alias}</div>}
-
                                                 </div>
-
                                             ))}
-
                                         </div>
-
                                     </section>
-
                                 ))}
-
                             </main>
-
                         </div>
-
                     )}
-
-
-                    {/* 연대기 뷰 */}
 
                     {viewMode === 'timeline' && (
-
                         <div className="max-w-3xl mx-auto bg-white p-10 rounded-2xl border border-[#E2EAE5] shadow-soft relative">
-
                             <h2 className="text-center font-bold text-xl mb-10 uppercase tracking-widest text-[#4A5D50]">통합 연대기</h2>
-
                             <div className="relative pl-10 space-y-10">
-
                                 <div className="timeline-line"></div>
-
                                 {globalTimeline.map(log => (
-
                                     <div key={log.id} className="relative pl-6">
-
                                         <div className="timeline-dot"></div>
-
                                         <div className="font-bold opacity-40 mb-1 uppercase text-xs">{log.date}</div>
-
                                         <div className="font-bold mb-2 text-base">{log.charName} <span className="opacity-40 text-xs ml-1">[{log.mythName}]</span></div>
-
                                         <div className="bg-[#F9FBF9] p-4 rounded-2xl border border-[#E2EAE5] leading-relaxed">{log.text}</div>
-
                                     </div>
-
                                 ))}
-
                                 {globalTimeline.length === 0 && <div className="text-center opacity-40 py-10">기록된 연대기가 없습니다.</div>}
-
                             </div>
-
                         </div>
-
                     )}
-
 
                     {/* 상세 모달 */}
-
                     {selectedChar && (
-
                         <div className="fixed inset-0 z-50 bg-[#F1F5F2] overflow-y-auto p-4 md:p-10 no-scrollbar">
-
                             <div className="max-w-6xl mx-auto bg-white rounded-3xl shadow-2xl overflow-hidden min-h-full md:min-h-0 border border-[#E2EAE5]">
-
                                 <header className="p-8 border-b border-[#E2EAE5] flex justify-between items-center bg-white sticky top-0 z-20">
-
                                     <div className="flex items-center gap-4">
-
-                                        <h2 className="text-3xl font-bold text-[#4D5A51]">{selectedChar.name}</h2>
-
+                                        <h2 className="text-header text-[#4D5A51]">{selectedChar.name}</h2>
                                         <span className="px-3 py-1 border border-[#98B0A0] text-[#98B0A0] rounded-2xl font-bold text-xs uppercase">{selectedChar.hasTimeline ? '연대기 모드' : '정보 모드'}</span>
-
                                     </div>
-
                                     <button onClick={()=>setSelectedChar(null)} className="px-6 py-2 bg-[#98B0A0] text-white font-bold rounded-2xl hover:bg-[#7A9482] transition-all">닫기</button>
-
                                 </header>
 
-
                                 <div className="p-8 flex flex-col lg:flex-row gap-10">
-
                                     {/* 왼쪽 상세 정보 */}
-
                                     <aside className="w-full lg:w-[420px] space-y-6">
-
                                         <div className="flex justify-between items-center border-b border-[#E2EAE5] pb-2">
-
                                             <h3 className="font-bold opacity-50 uppercase text-xs flex items-center gap-2"><Icon name="UserCircle"/> 고정 정보</h3>
-
                                             <button onClick={()=>setIsEditing(!isEditing)} className="font-bold text-xs border-b border-[#4D5A51] text-[#4D5A51]">{isEditing ? '취소' : '편집'}</button>
-
                                         </div>
 
-
                                         {isEditing ? (
-
                                             <div className="space-y-3 bg-[#F9FBF9] p-6 rounded-2xl border border-[#E2EAE5]">
-
                                                 <div className="grid grid-cols-2 gap-3">
-
                                                     <div><label className="block font-bold opacity-40 mb-1">소속</label><input type="text" value={editForm.mythName} onChange={e=>setEditForm({...editForm, mythName:e.target.value})} className="w-full p-2 bg-white border border-[#E2EAE5] rounded-2xl outline-none"/></div>
-
                                                     <div><label className="block font-bold opacity-40 mb-1">이름</label><input type="text" value={editForm.name} onChange={e=>setEditForm({...editForm, name:e.target.value})} className="w-full p-2 bg-white border border-[#E2EAE5] rounded-2xl outline-none"/></div>
-
                                                     <div><label className="block font-bold opacity-40 mb-1">나이</label><input type="text" value={editForm.age} onChange={e=>setEditForm({...editForm, age:e.target.value})} className="w-full p-2 bg-white border border-[#E2EAE5] rounded-2xl outline-none"/></div>
-
                                                     <div><label className="block font-bold opacity-40 mb-1">성별</label><input type="text" value={editForm.gender} onChange={e=>setEditForm({...editForm, gender:e.target.value})} className="w-full p-2 bg-white border border-[#E2EAE5] rounded-2xl outline-none"/></div>
-
                                                     <div><label className="block font-bold opacity-40 mb-1">크기</label><input type="text" value={editForm.size} onChange={e=>setEditForm({...editForm, size:e.target.value})} className="w-full p-2 bg-white border border-[#E2EAE5] rounded-2xl outline-none"/></div>
-
                                                     <div><label className="block font-bold opacity-40 mb-1">별칭</label><input type="text" value={editForm.alias} onChange={e=>setEditForm({...editForm, alias:e.target.value})} className="w-full p-2 bg-white border border-[#E2EAE5] rounded-2xl outline-none"/></div>
-
                                                 </div>
-
                                                 <div><label className="block font-bold opacity-40 mb-1">소속 단체</label><input type="text" value={editForm.group} onChange={e=>setEditForm({...editForm, group:e.target.value})} className="w-full p-2 bg-white border border-[#E2EAE5] rounded-2xl outline-none"/></div>
-
                                                 <div><label className="block font-bold opacity-40 mb-1">상세 설정</label><textarea value={editForm.otherInfo} onChange={e=>setEditForm({...editForm, otherInfo:e.target.value})} className="w-full p-2 bg-white border border-[#E2EAE5] rounded-2xl outline-none h-32"></textarea></div>
-
                                                 <div className="flex items-center gap-4 py-2">
-
                                                     <label className="font-bold opacity-40">연대기 기능</label>
-
                                                     <button onClick={()=>setEditForm({...editForm, hasTimeline:!editForm.hasTimeline})} className={`px-4 py-1 rounded-2xl font-bold border ${editForm.hasTimeline?'bg-[#98B0A0] text-white':'bg-white'}`}>{editForm.hasTimeline ? '사용' : '미사용'}</button>
-
                                                 </div>
-
                                                 <div className="flex gap-2 pt-4">
-
-                                                    <button onClick={saveDetails} className="flex-1 py-3 bg-[#98B0A0] text-white font-bold rounded-2xl hover:bg-[#7A9482] transition-all">저장하세요</button>
-
+                                                    <button onClick={saveDetails} className="flex-1 py-3 bg-[#98B0A0] text-white font-bold rounded-2xl hover:bg-[#7A9482] transition-all">저장하기</button>
                                                     <button onClick={deleteChar} className="px-4 py-3 border border-red-200 text-red-400 font-bold rounded-2xl hover:bg-red-50 transition-all">삭제</button>
-
                                                 </div>
-
                                             </div>
-
                                         ) : (
-
                                             <div className="space-y-6 bg-white rounded-2xl">
-
                                                 <div className="grid grid-cols-2 gap-y-6 gap-x-4 text-center">
-
                                                     <div><span className="block font-bold opacity-30 mb-1">나이</span><span className="font-bold text-lg">{selectedChar.age || '-'}</span></div>
-
                                                     <div><span className="block font-bold opacity-30 mb-1">성별</span><span className="font-bold text-lg">{selectedChar.gender || '-'}</span></div>
-
                                                     <div><span className="block font-bold opacity-30 mb-1">크기</span><span className="font-bold text-lg">{selectedChar.size || '-'}</span></div>
-
                                                     <div><span className="block font-bold opacity-30 mb-1">별칭</span><span className="font-bold text-lg">{selectedChar.alias || '-'}</span></div>
-
                                                     <div className="col-span-2 border-t border-[#E2EAE5] pt-4"><span className="block font-bold opacity-30 mb-1">소속 단체</span><span className="font-bold">{selectedChar.group || '-'}</span></div>
-
                                                 </div>
-
                                                 <div className="pt-4 border-t border-[#E2EAE5]">
-
                                                     <label className="block font-bold opacity-30 mb-2 text-center uppercase tracking-widest">상세 설정 노트</label>
-
                                                     <div className="bg-[#F9FBF9] p-6 rounded-2xl leading-loose text-justify shadow-inner min-h-[150px] whitespace-pre-wrap">{selectedChar.otherInfo || '상세 정보가 없습니다.'}</div>
-
                                                 </div>
-
                                             </div>
-
                                         )}
-
                                     </aside>
 
-
                                     {/* 오른쪽 연대기 */}
-
                                     <main className="flex-1">
-
                                         {selectedChar.hasTimeline ? (
-
                                             <div className="max-w-2xl mx-auto space-y-10">
-
                                                 <div className="bg-white p-8 rounded-2xl border border-[#E2EAE5] shadow-soft">
-
                                                     <h3 className="font-bold opacity-50 mb-6 flex items-center gap-2 text-xs uppercase"><Icon name="Clock"/> 사건 기록</h3>
-
                                                     <div className="flex flex-col gap-4">
-
                                                         <div className="flex gap-4">
-
                                                             <input type="date" value={logDate} onChange={e=>setLogDate(e.target.value)} className="w-1/3 p-3 bg-[#F9FBF9] border border-[#E2EAE5] rounded-2xl outline-none" />
-
                                                             <input type="text" value={logText} onChange={e=>setLogText(e.target.value)} className="flex-1 p-3 bg-[#F9FBF9] border border-[#E2EAE5] rounded-2xl outline-none" placeholder="사건 내용" />
-
                                                         </div>
-
                                                         <button onClick={addLog} className="w-full py-3 bg-[#98B0A0] text-white font-bold rounded-2xl shadow-md hover:bg-[#7A9482] transition-all">기록하기</button>
-
                                                     </div>
-
                                                 </div>
-
 
                                                 <div className="relative pl-10 space-y-8 pb-20">
-
                                                     {(selectedChar.logs||[]).map(log => (
-
                                                         <div key={log.id} className="relative pl-6">
-
                                                             <div className="timeline-dot"></div>
-
                                                             <div className="timeline-line" style={{top: '20px', bottom: '-20px', left: '19px'}}></div>
-
                                                             <div className="flex justify-between items-start mb-2">
-
                                                                 <span className="font-bold opacity-40 uppercase tracking-widest">{log.date}</span>
-
                                                                 <button onClick={()=>deleteLog(log.id)} className="opacity-20 hover:text-red-500 transition-colors"><Icon name="Trash2" size={14}/></button>
-
                                                             </div>
-
                                                             <div className="bg-white p-5 rounded-2xl border border-[#E2EAE5] shadow-sm leading-relaxed text-justify">{log.text}</div>
-
                                                         </div>
-
                                                     ))}
-
                                                 </div>
-
                                             </div>
-
                                         ) : (
-
                                             <div className="h-full flex flex-col items-center justify-center opacity-20 border-2 border-dashed border-[#AAB8B0] rounded-2xl p-20 bg-[#F9FBF9]">
-
                                                 <Icon name="History" size={80} />
-
                                                 <p className="mt-6 font-bold text-center">연대기 기능이 꺼져 있습니다.</p>
-
                                             </div>
-
                                         )}
-
                                     </main>
-
                                 </div>
-
                             </div>
-
                         </div>
-
                     )}
-
                 </div>
-
             );
-
         };
 
-
         const root = ReactDOM.createRoot(document.getElementById('root'));
-
         root.render(<App />);
-
     </script>
-
 </body>
-
 </html>
-
 
 
